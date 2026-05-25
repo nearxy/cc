@@ -606,24 +606,37 @@ a:hover { text-decoration: underline; }
   }
 
   // ---- Clipboard copy ----
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try { document.execCommand('copy'); } catch {
-        showToast('复制失败，请手动长按选择复制');
-        document.body.removeChild(ta);
-        return;
-      }
-      document.body.removeChild(ta);
+  function copyText(text) {
+    // Don't use await — iOS requires clipboard.writeText() in the
+    // synchronous user-gesture context, and await breaks that chain.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制');
+      }).catch(() => {
+        fallbackExecCopy(text);
+      });
+    } else {
+      fallbackExecCopy(text);
     }
-    showToast('已复制');
+  }
+
+  function fallbackExecCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    // iOS needs the element to be "present" — not fully hidden or offscreen
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;opacity:0.01;pointer-events:none;z-index:-1';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, 99999);
+    try {
+      document.execCommand('copy');
+      showToast('已复制');
+    } catch {
+      showToast('复制失败，请手动长按选择复制');
+    }
+    document.body.removeChild(ta);
   }
 
   function downloadFile(dataUrl, filename) {
