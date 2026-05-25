@@ -621,22 +621,31 @@ a:hover { text-decoration: underline; }
   }
 
   function fallbackExecCopy(text) {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    // iOS needs the element to be "present" — not fully hidden or offscreen
-    ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;opacity:0.01;pointer-events:none;z-index:-1';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    ta.setSelectionRange(0, 99999);
+    // iOS Safari needs contentEditable + Selection API for execCommand('copy')
+    // to work reliably — a plain textarea often fails on iOS.
+    const el = document.createElement('div');
+    el.contentEditable = 'true';
+    el.setAttribute('readonly', '');
+    el.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0.01;overflow:hidden;white-space:pre;user-select:text;-webkit-user-select:text';
+    document.body.appendChild(el);
+    el.textContent = text;
+    el.focus();
+
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
     try {
       document.execCommand('copy');
       showToast('已复制');
     } catch {
       showToast('复制失败，请手动长按选择复制');
     }
-    document.body.removeChild(ta);
+
+    sel.removeAllRanges();
+    document.body.removeChild(el);
   }
 
   function downloadFile(dataUrl, filename) {
