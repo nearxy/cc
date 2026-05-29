@@ -605,10 +605,21 @@ a:hover { text-decoration: underline; }
     toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
   }
 
+  // ---- iOS detection ----
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
   // ---- Clipboard copy ----
   function copyText(text) {
-    // Don't use await — iOS requires clipboard.writeText() in the
-    // synchronous user-gesture context, and await breaks that chain.
+    // iOS: navigator.clipboard.writeText() resolves silently without
+    // writing to the clipboard (especially WKWebView). Use execCommand
+    // directly within the synchronous user-gesture handler.
+    if (isIOS()) {
+      fallbackExecCopy(text);
+      return;
+    }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
         showToast('已复制');
@@ -621,21 +632,23 @@ a:hover { text-decoration: underline; }
   }
 
   function fallbackExecCopy(text) {
-    // iOS Safari needs contentEditable + Selection API for execCommand('copy')
-    // to work reliably — a plain textarea often fails on iOS.
-    const el = document.createElement('div');
-    el.contentEditable = 'true';
+    const el = document.createElement('textarea');
+    el.value = text;
     el.setAttribute('readonly', '');
-    el.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0.01;overflow:hidden;white-space:pre;user-select:text;-webkit-user-select:text';
+    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
     document.body.appendChild(el);
-    el.textContent = text;
-    el.focus();
 
-    const sel = window.getSelection();
+    // iOS Safari requires contentEditable on the textarea for the Selection
+    // API + execCommand('copy') to write to the system clipboard.
+    el.contentEditable = 'true';
+    el.focus();
     const range = document.createRange();
     range.selectNodeContents(el);
+    const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
+    el.setSelectionRange(0, 999999);
+    el.contentEditable = 'false';
 
     try {
       document.execCommand('copy');
